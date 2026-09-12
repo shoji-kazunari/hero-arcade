@@ -13,11 +13,12 @@
   var BLACK_CHANCE = 0.12;
   var WAVE_METEOR_COUNT = 30;
   var DEAD_FREEZE_DURATION = 1.3;
+  var MIN_CLUSTER_GAP = 210;
 
   var SIZE_DEF = {
-    small: { radius: 10, blast: 100, damage: 2, weight: 45 },
-    medium: { radius: 15, blast: 130, damage: 4, weight: 35 },
-    large: { radius: 21, blast: 170, damage: 8, weight: 20 }
+    small: { radius: 10, blast: 52, damage: 2, weight: 45 },
+    medium: { radius: 15, blast: 70, damage: 4, weight: 35 },
+    large: { radius: 21, blast: 96, damage: 8, weight: 20 }
   };
   var SIZE_NAMES = Object.keys(SIZE_DEF);
 
@@ -122,54 +123,91 @@
     };
   }
 
-  function buildWave(number) {
-    var marginX = 40;
-    var count = WAVE_METEOR_COUNT;
-    var list = [];
+  function overlapsAny(list, x, y, radius) {
+    for (var k = 0; k < list.length; k++) {
+      var other = list[k];
+      var dx = other.x - x;
+      var dy = other.y - y;
+      var need = other.radius + radius + 8;
+      if (dx * dx + dy * dy < need * need) return true;
+    }
+    return false;
+  }
 
+  function findClusterCenter(list, centers, marginX, searchDepth) {
+    for (var attempt = 0; attempt < 200; attempt++) {
+      var x = rand(marginX + 20, W - marginX - 20);
+      var y = rand(0, searchDepth);
+      var ok = true;
+      for (var i = 0; i < centers.length; i++) {
+        var dx = centers[i].x - x;
+        var dy = centers[i].y - y;
+        if (dx * dx + dy * dy < MIN_CLUSTER_GAP * MIN_CLUSTER_GAP) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) return { x: x, y: y };
+    }
+    return { x: rand(marginX + 20, W - marginX - 20), y: searchDepth + 40 };
+  }
+
+  function growCluster(list, center, size, marginX) {
+    var members = [];
     var first = makeMeteorSpec();
-    first.x = rand(marginX, W - marginX);
-    first.y = 0;
-    first.parent = -1;
-    list.push(first);
+    first.x = clamp(center.x, marginX, W - marginX);
+    first.y = center.y;
+    if (!overlapsAny(list, first.x, first.y, first.radius)) {
+      list.push(first);
+      members.push(first);
+    }
 
-    var globalTries = 0;
-    var globalLimit = count * 60;
-
-    while (list.length < count && globalTries < globalLimit) {
-      globalTries++;
-      var anchorIndex = Math.floor(Math.random() * list.length);
-      var anchor = list[anchorIndex];
+    var tries = 0;
+    var limit = size * 40;
+    while (members.length < size && tries < limit) {
+      tries++;
+      var anchor = members[Math.floor(Math.random() * members.length)];
       var spec = makeMeteorSpec();
-
-      for (var attempt = 0; attempt < 25; attempt++) {
-        var minDist = anchor.radius + spec.radius + 14;
-        var maxDist = Math.max(minDist + 16, anchor.blast * 0.88);
+      for (var attempt = 0; attempt < 20; attempt++) {
+        var minDist = anchor.radius + spec.radius + 12;
+        var maxDist = Math.max(minDist + 10, anchor.blast * 0.8);
         var dist = rand(minDist, maxDist);
         var angle = rand(0, Math.PI * 2);
         var x = anchor.x + Math.cos(angle) * dist;
         var y = anchor.y + Math.sin(angle) * dist;
         if (x < marginX || x > W - marginX) continue;
-
-        var overlap = false;
-        for (var k = 0; k < list.length; k++) {
-          var other = list[k];
-          var dx = other.x - x;
-          var dy = other.y - y;
-          var need = other.radius + spec.radius + 8;
-          if (dx * dx + dy * dy < need * need) {
-            overlap = true;
-            break;
-          }
-        }
-        if (overlap) continue;
-
+        if (overlapsAny(list, x, y, spec.radius)) continue;
         spec.x = x;
         spec.y = y;
-        spec.parent = anchorIndex;
         list.push(spec);
+        members.push(spec);
         break;
       }
+    }
+    return members;
+  }
+
+  function buildWave(number) {
+    var marginX = 40;
+    var total = WAVE_METEOR_COUNT;
+    var clusterCount = Math.min(9, 4 + Math.floor(number / 3));
+    var list = [];
+    var centers = [];
+    var searchDepth = 260;
+    var remaining = total;
+
+    for (var c = 0; c < clusterCount; c++) {
+      var clustersLeft = clusterCount - c;
+      var avg = remaining / clustersLeft;
+      var size = Math.max(1, Math.round(rand(avg * 0.5, avg * 1.5)));
+      size = Math.min(size, remaining - (clustersLeft - 1));
+      size = Math.max(1, size);
+      remaining -= size;
+
+      var center = findClusterCenter(list, centers, marginX, searchDepth);
+      centers.push(center);
+      growCluster(list, center, size, marginX);
+      searchDepth += 90;
     }
 
     var minY = 0;
@@ -182,12 +220,12 @@
     });
 
     var hasGray = list.some(function (m) { return m.color === "gray"; });
-    if (!hasGray) list[0].color = "gray";
+    if (!hasGray && list.length > 0) list[0].color = "gray";
 
     var vy = 34 + Math.min(number, 12) * 4;
     var startY = -maxOffset - 60;
 
-    return { meteors: list, allMeteors: list.slice(), formationY: startY, vy: vy, anyLeaked: false };
+    return { meteors: list, formationY: startY, vy: vy, anyLeaked: false };
   }
 
   function makeCraters(radius) {
@@ -437,21 +475,6 @@
     ctx.restore();
   }
 
-  function drawHintLines() {
-    if (!wave || !wave.allMeteors) return;
-    ctx.strokeStyle = "rgba(255,255,255,0.14)";
-    ctx.lineWidth = 1.5;
-    wave.allMeteors.forEach(function (m) {
-      if (m.parent < 0) return;
-      var parent = wave.allMeteors[m.parent];
-      if (meteors.indexOf(m) === -1 || meteors.indexOf(parent) === -1) return;
-      ctx.beginPath();
-      ctx.moveTo(m.x, meteorY(m));
-      ctx.lineTo(parent.x, meteorY(parent));
-      ctx.stroke();
-    });
-  }
-
   function drawMeteor(m) {
     var my = meteorY(m);
     ctx.save();
@@ -579,7 +602,6 @@
     }
 
     drawBackdrop();
-    drawHintLines();
     if (wave) meteors.forEach(drawMeteor);
     explosions.forEach(drawExplosion);
     bullets.forEach(drawBullet);
