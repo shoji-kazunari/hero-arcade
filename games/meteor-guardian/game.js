@@ -11,9 +11,8 @@
   var EXPLOSION_DURATION = 1.0;
   var BULLET_SPEED = 620;
   var BLACK_CHANCE = 0.12;
-  var GRID_COLS = 6;
-  var GRID_ROWS = 5;
-  var CELL_REMOVE_CHANCE = 0.15;
+  var WAVE_METEOR_COUNT = 30;
+  var DEAD_FREEZE_DURATION = 1.3;
 
   var SIZE_DEF = {
     small: { radius: 10, blast: 100, damage: 2, weight: 45 },
@@ -41,8 +40,10 @@
   var STATE_READY = "ready";
   var STATE_INTRO = "intro";
   var STATE_PLAYING = "playing";
+  var STATE_DEAD = "dead";
   var STATE_OVER = "over";
   var state = STATE_READY;
+  var deadTimer = 0;
 
   var ship = { x: 0, targetX: 0, radius: 18 };
   var hp = HP_MAX;
@@ -107,98 +108,86 @@
     return SIZE_NAMES[0];
   }
 
-  function isGridConnected(occupied, rows, cols) {
-    var total = 0;
-    var startR = -1;
-    var startC = -1;
-    var r, c;
-    for (r = 0; r < rows; r++) {
-      for (c = 0; c < cols; c++) {
-        if (occupied[r][c]) {
-          total++;
-          if (startR < 0) {
-            startR = r;
-            startC = c;
-          }
-        }
-      }
-    }
-    if (total === 0) return true;
-    var seen = [];
-    for (r = 0; r < rows; r++) seen.push(new Array(cols).fill(false));
-    var stack = [[startR, startC]];
-    seen[startR][startC] = true;
-    var reached = 1;
-    while (stack.length) {
-      var cur = stack.pop();
-      for (var dr = -1; dr <= 1; dr++) {
-        for (var dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          var nr = cur[0] + dr;
-          var nc = cur[1] + dc;
-          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-          if (!occupied[nr][nc] || seen[nr][nc]) continue;
-          seen[nr][nc] = true;
-          reached++;
-          stack.push([nr, nc]);
-        }
-      }
-    }
-    return reached === total;
+  function makeMeteorSpec() {
+    var size = pickWeightedSize();
+    var color = Math.random() < BLACK_CHANCE ? "black" : "gray";
+    return {
+      size: size,
+      color: color,
+      radius: SIZE_DEF[size].radius,
+      blast: SIZE_DEF[size].blast,
+      rotation: rand(0, Math.PI * 2),
+      spin: rand(-1, 1),
+      craters: makeCraters(SIZE_DEF[size].radius)
+    };
   }
 
   function buildWave(number) {
-    var rows = GRID_ROWS;
-    var cols = GRID_COLS;
     var marginX = 40;
-    var colGap = (W - marginX * 2) / (cols - 1);
-    var rowGap = 52;
+    var count = WAVE_METEOR_COUNT;
+    var list = [];
 
-    var occupied = [];
-    var r, c;
-    for (r = 0; r < rows; r++) {
-      occupied.push(new Array(cols).fill(true));
+    var first = makeMeteorSpec();
+    first.x = rand(marginX, W - marginX);
+    first.y = 0;
+    first.parent = -1;
+    list.push(first);
+
+    var globalTries = 0;
+    var globalLimit = count * 60;
+
+    while (list.length < count && globalTries < globalLimit) {
+      globalTries++;
+      var anchorIndex = Math.floor(Math.random() * list.length);
+      var anchor = list[anchorIndex];
+      var spec = makeMeteorSpec();
+
+      for (var attempt = 0; attempt < 25; attempt++) {
+        var minDist = anchor.radius + spec.radius + 14;
+        var maxDist = Math.max(minDist + 16, anchor.blast * 0.88);
+        var dist = rand(minDist, maxDist);
+        var angle = rand(0, Math.PI * 2);
+        var x = anchor.x + Math.cos(angle) * dist;
+        var y = anchor.y + Math.sin(angle) * dist;
+        if (x < marginX || x > W - marginX) continue;
+
+        var overlap = false;
+        for (var k = 0; k < list.length; k++) {
+          var other = list[k];
+          var dx = other.x - x;
+          var dy = other.y - y;
+          var need = other.radius + spec.radius + 8;
+          if (dx * dx + dy * dy < need * need) {
+            overlap = true;
+            break;
+          }
+        }
+        if (overlap) continue;
+
+        spec.x = x;
+        spec.y = y;
+        spec.parent = anchorIndex;
+        list.push(spec);
+        break;
+      }
     }
 
-    var order = [];
-    for (r = 0; r < rows; r++) for (c = 0; c < cols; c++) order.push([r, c]);
-    order.sort(function () { return Math.random() - 0.5; });
-
-    order.forEach(function (cell) {
-      if (Math.random() < CELL_REMOVE_CHANCE) {
-        occupied[cell[0]][cell[1]] = false;
-        if (!isGridConnected(occupied, rows, cols)) {
-          occupied[cell[0]][cell[1]] = true;
-        }
-      }
+    var minY = 0;
+    list.forEach(function (m) { if (m.y < minY) minY = m.y; });
+    var shift = -minY + 20;
+    var maxOffset = 0;
+    list.forEach(function (m) {
+      m.offsetY = m.y + shift;
+      if (m.offsetY > maxOffset) maxOffset = m.offsetY;
     });
 
-    var list = [];
-    var hasGray = false;
-    for (r = 0; r < rows; r++) {
-      for (c = 0; c < cols; c++) {
-        if (!occupied[r][c]) continue;
-        var size = pickWeightedSize();
-        var color = Math.random() < BLACK_CHANCE ? "black" : "gray";
-        if (color === "gray") hasGray = true;
-        list.push({
-          x: marginX + c * colGap + rand(-4, 4),
-          offsetY: r * rowGap + rand(-4, 4),
-          size: size,
-          radius: SIZE_DEF[size].radius,
-          color: color,
-          rotation: rand(0, Math.PI * 2),
-          spin: rand(-1, 1),
-          craters: makeCraters(SIZE_DEF[size].radius)
-        });
-      }
-    }
-    if (!hasGray && list.length > 0) list[0].color = "gray";
+    var hasGray = list.some(function (m) { return m.color === "gray"; });
+    if (!hasGray) list[0].color = "gray";
 
-    var vy = 36 + Math.min(number, 12) * 4;
-    var startY = -(rows - 1) * rowGap - 60;
+    var vy = 34 + Math.min(number, 12) * 4;
+    var startY = -maxOffset - 60;
 
-    return { meteors: list, formationY: startY, vy: vy, anyLeaked: false };
+    return { meteors: list, allMeteors: list.slice(), formationY: startY, vy: vy, anyLeaked: false };
   }
 
   function makeCraters(radius) {
@@ -373,7 +362,8 @@
         spawnPopup(meteor2.x, damageLine - 16, "-" + dmg, "#ff6b4a");
         if (hp <= 0) {
           hp = 0;
-          endGame();
+          state = STATE_DEAD;
+          deadTimer = DEAD_FREEZE_DURATION;
           return;
         }
       }
@@ -445,6 +435,21 @@
     ctx.textBaseline = "middle";
     ctx.fillText("🦸", 0, 2);
     ctx.restore();
+  }
+
+  function drawHintLines() {
+    if (!wave || !wave.allMeteors) return;
+    ctx.strokeStyle = "rgba(255,255,255,0.14)";
+    ctx.lineWidth = 1.5;
+    wave.allMeteors.forEach(function (m) {
+      if (m.parent < 0) return;
+      var parent = wave.allMeteors[m.parent];
+      if (meteors.indexOf(m) === -1 || meteors.indexOf(parent) === -1) return;
+      ctx.beginPath();
+      ctx.moveTo(m.x, meteorY(m));
+      ctx.lineTo(parent.x, meteorY(parent));
+      ctx.stroke();
+    });
   }
 
   function drawMeteor(m) {
@@ -569,21 +574,22 @@
     ctx.clearRect(0, 0, W, H);
 
     ctx.save();
-    if (shake > 0) {
+    if (shake > 0 && state !== STATE_DEAD) {
       ctx.translate(rand(-6, 6) * shake, rand(-6, 6) * shake);
     }
 
     drawBackdrop();
+    drawHintLines();
     if (wave) meteors.forEach(drawMeteor);
     explosions.forEach(drawExplosion);
     bullets.forEach(drawBullet);
     drawParticles();
     drawPopups();
-    if (state === STATE_PLAYING || state === STATE_INTRO) drawShip();
+    if (state === STATE_PLAYING || state === STATE_INTRO || state === STATE_DEAD) drawShip();
 
     ctx.restore();
 
-    if (state === STATE_PLAYING || state === STATE_INTRO) {
+    if (state === STATE_PLAYING || state === STATE_INTRO || state === STATE_DEAD) {
       drawHpBar();
       drawAmmo();
       drawChainCounter();
@@ -598,6 +604,9 @@
 
     if (state === STATE_INTRO || state === STATE_PLAYING) {
       update(dt);
+    } else if (state === STATE_DEAD) {
+      deadTimer -= dt;
+      if (deadTimer <= 0) endGame();
     }
     draw();
     requestAnimationFrame(loop);
