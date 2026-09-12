@@ -1,0 +1,35 @@
+:root {
+  --bg: #0b1020;
+  --bg-card: #131a2e;
+  --fg: #eef1fb;
+  --fg-dim: #9aa4c4;
+  --accent: #ff6b4a;
+  --border: #232c47;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Hiragino Sans", "Yu Gothic", system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 16px 40px;
+}

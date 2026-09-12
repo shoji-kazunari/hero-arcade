@@ -1,0 +1,121 @@
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.game-shell {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  background: #050714;
+}
+
+.back-link {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: 12px;
+  z-index: 5;
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-decoration: none;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+#gameCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.hud {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.hud__lives {
+  display: flex;
+  gap: 3px;
+  font-size: 16px;
+}
+
+.hud__score {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  background: rgba(5, 7, 20, 0.86);
+  backdrop-filter: blur(2px);
+}
+
+.overlay__emoji {
+  font-size: 48px;
+  margin: 0 0 8px;
+}
+
+.overlay__title {
+  font-size: 24px;
+  margin: 0 0 12px;
+}
+
+.overlay__text {
+  color: var(--fg-dim);
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 0 0 24px;
+  max-width: 320px;
+}
+
+.overlay__result {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.overlay__best {
+  color: var(--fg-dim);
+  font-size: 13px;
+  margin: 6px 0 24px;
+}
+
+.overlay__button {
+  appearance: none;
+  border: none;
+  background: var(--accent);
+  color: #1a0a05;
+  font-weight: 800;
+  font-size: 15px;
+  padding: 14px 28px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.overlay__button:active {
+  transform: scale(0.97);
+}

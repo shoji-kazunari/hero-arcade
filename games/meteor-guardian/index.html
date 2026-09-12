@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>隕石ガーディアン | ヒーローアーケード</title>
+  <meta name="description" content="地球に迫る巨大隕石を、ヒーローが撃ち落として守るスマホミニゲーム。">
+  <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../assets/css/base.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="game-shell">
+    <a class="back-link" href="../../">← アーケードに戻る</a>
+
+    <div class="hud">
+      <div class="hud__lives" id="hudLives"></div>
+      <div class="hud__score">SCORE <span id="hudScore">0</span></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="overlay" id="startOverlay">
+      <p class="overlay__emoji">☄️</p>
+      <h1 class="overlay__title">隕石ガーディアン</h1>
+      <p class="overlay__text">地球に迫る隕石を、ヒーローの光弾で撃ち落とせ。<br>左右にドラッグしてヒーローを動かそう。</p>
+      <button class="overlay__button" id="startButton">タップしてスタート</button>
+    </div>
+
+    <div class="overlay" id="gameOverOverlay" hidden>
+      <p class="overlay__emoji">🌍</p>
+      <h1 class="overlay__title">ゲームオーバー</h1>
+      <p class="overlay__result">SCORE <span id="finalScore">0</span></p>
+      <p class="overlay__best">BEST <span id="bestScore">0</span></p>
+      <button class="overlay__button" id="retryButton">もう一度あそぶ</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
