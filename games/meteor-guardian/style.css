@@ -43,18 +43,7 @@ html, body {
   font-size: 14px;
 }
 
-.hud__lives {
-  display: flex;
-  gap: 3px;
-  font-size: 16px;
-}
-
-.hud__life--lost {
-  filter: grayscale(1);
-  opacity: 0.35;
-}
-
-.hud__score {
+.hud__badge {
   background: rgba(0, 0, 0, 0.35);
   padding: 5px 10px;
   border-radius: 999px;

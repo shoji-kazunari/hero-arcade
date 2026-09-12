@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>隕石ガーディアン | ヒーローアーケード</title>
-  <meta name="description" content="地球に迫る巨大隕石を、ヒーローが体を張ってキャッチして守るスマホミニゲーム。">
+  <meta name="description" content="隕石を撃って連鎖爆発を起こし、ウェーブを全滅させて地球を守るシューティングパズル。">
   <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../../assets/css/base.css">
   <link rel="stylesheet" href="style.css">
@@ -14,8 +14,7 @@
     <a class="back-link" href="../../">← アーケードに戻る</a>
 
     <div class="hud">
-      <div class="hud__lives" id="hudLives"></div>
-      <div class="hud__score">SCORE <span id="hudScore">0</span></div>
+      <div class="hud__badge" id="hudWave">WAVE 1</div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -23,15 +22,21 @@
     <div class="overlay" id="startOverlay">
       <p class="overlay__emoji">☄️</p>
       <h1 class="overlay__title">隕石ガーディアン</h1>
-      <p class="overlay__text">地球に迫る隕石の真下に飛び込んで、ヒーローがキャッチ！<br>左右にドラッグしてヒーローを動かそう。</p>
+      <p class="overlay__text">
+        指を離さずスワイプで自機が左右に動く。<br>
+        動かさずにタップすると弾を1発、真上に発射。<br>
+        隕石を1つ壊すと爆風が広がり、触れた隕石も連鎖で爆発する。<br>
+        ウェーブの隕石を全滅させて次のウェーブへ。<br>
+        黒い隕石は直接は壊せない、連鎖でしか壊せない。
+      </p>
       <button class="overlay__button" id="startButton">タップしてスタート</button>
     </div>
 
     <div class="overlay" id="gameOverOverlay" hidden>
       <p class="overlay__emoji">🌍</p>
       <h1 class="overlay__title">ゲームオーバー</h1>
-      <p class="overlay__result">SCORE <span id="finalScore">0</span></p>
-      <p class="overlay__best">BEST <span id="bestScore">0</span></p>
+      <p class="overlay__result">WAVE <span id="finalScore">1</span></p>
+      <p class="overlay__best">BEST WAVE <span id="bestScore">1</span></p>
       <button class="overlay__button" id="retryButton">もう一度あそぶ</button>
     </div>
   </div>
