@@ -2,6 +2,8 @@
   "use strict";
 
   var BEST_KEY = "heroArcade.meteorGuardian.best";
+  var CATCH_RADIUS = 42;
+  var HERO_FLASH_DURATION = 0.25;
 
   var canvas = document.getElementById("gameCanvas");
   var ctx = canvas.getContext("2d");
@@ -24,25 +26,25 @@
   var state = STATE_READY;
 
   var earth = { x: 0, y: 0, radius: 0 };
-  var hero = { x: 0, y: 0, targetX: 0, radius: 16 };
-  var bullets = [];
+  var hero = { x: 0, y: 0, targetX: 0, radius: 18 };
   var meteors = [];
   var particles = [];
+  var popups = [];
 
   var score = 0;
   var lives = 3;
   var elapsed = 0;
   var spawnTimer = 0;
-  var fireTimer = 0;
+  var heroFlash = 0;
   var shake = 0;
   var lastTime = 0;
   var moveLeft = false;
   var moveRight = false;
 
   var METEOR_KINDS = [
-    { name: "small", radiusMin: 13, radiusMax: 17, hp: 1, speedMult: 1.35, points: 10, weight: 60 },
-    { name: "medium", radiusMin: 21, radiusMax: 27, hp: 2, speedMult: 1.0, points: 25, weight: 30 },
-    { name: "large", radiusMin: 32, radiusMax: 40, hp: 3, speedMult: 0.72, points: 50, weight: 10 }
+    { name: "small", radiusMin: 13, radiusMax: 17, speedMult: 1.3, points: 10, weight: 55 },
+    { name: "medium", radiusMin: 21, radiusMax: 27, speedMult: 1.0, points: 25, weight: 32 },
+    { name: "large", radiusMin: 32, radiusMax: 40, speedMult: 0.75, points: 50, weight: 13 }
   ];
 
   function resize() {
@@ -57,7 +59,7 @@
     earth.x = W / 2;
     earth.y = H + earth.radius * 0.42;
 
-    hero.y = earthTopY() - 30;
+    hero.y = earthTopY() - 70;
     if (hero.x === 0) {
       hero.x = W / 2;
       hero.targetX = W / 2;
@@ -96,17 +98,16 @@
   function spawnMeteor() {
     var kind = pickMeteorKind();
     var radius = rand(kind.radiusMin, kind.radiusMax);
-    var baseSpeed = 55 + elapsed * 2.6;
+    var baseSpeed = 50 + elapsed * 2.2;
     meteors.push({
       x: rand(radius + 6, W - radius - 6),
       y: -radius - 10,
       radius: radius,
-      hp: kind.hp,
-      maxHp: kind.hp,
       vy: (baseSpeed + rand(-8, 8)) * kind.speedMult,
       rotation: rand(0, Math.PI * 2),
       spin: rand(-1.2, 1.2),
       points: kind.points,
+      resolved: false,
       craters: makeCraters(radius)
     });
   }
@@ -126,10 +127,6 @@
     return craters;
   }
 
-  function fireBullet() {
-    bullets.push({ x: hero.x, y: hero.y - hero.radius * 0.6, vy: -560, radius: 4 });
-  }
-
   function spawnBurst(x, y, color, count) {
     for (var i = 0; i < count; i++) {
       var a = rand(0, Math.PI * 2);
@@ -147,15 +144,19 @@
     }
   }
 
+  function spawnPopup(x, y, text, color) {
+    popups.push({ x: x, y: y, text: text, color: color, life: 0, maxLife: 0.7 });
+  }
+
   function resetGame() {
-    bullets = [];
     meteors = [];
     particles = [];
+    popups = [];
     score = 0;
     lives = 3;
     elapsed = 0;
     spawnTimer = 0;
-    fireTimer = 0;
+    heroFlash = 0;
     shake = 0;
     hero.x = W / 2;
     hero.targetX = W / 2;
@@ -167,7 +168,8 @@
     hudLives.innerHTML = "";
     for (var i = 0; i < 3; i++) {
       var span = document.createElement("span");
-      span.textContent = i < lives ? "❤️" : "🖤";
+      span.textContent = "❤️";
+      if (i >= lives) span.className = "hud__life--lost";
       hudLives.appendChild(span);
     }
   }
@@ -199,23 +201,13 @@
     hero.targetX = clamp(hero.targetX, hero.radius + 8, W - hero.radius - 8);
     hero.x += (hero.targetX - hero.x) * Math.min(1, dt * 12);
 
-    fireTimer -= dt;
-    if (fireTimer <= 0) {
-      fireBullet();
-      fireTimer = 0.22;
-    }
+    if (heroFlash > 0) heroFlash = Math.max(0, heroFlash - dt);
 
     spawnTimer -= dt;
-    var spawnInterval = Math.max(0.38, 1.3 - elapsed * 0.02);
+    var spawnInterval = Math.max(0.5, 1.5 - elapsed * 0.018);
     if (spawnTimer <= 0) {
       spawnMeteor();
       spawnTimer = spawnInterval;
-    }
-
-    for (var bi = bullets.length - 1; bi >= 0; bi--) {
-      var b = bullets[bi];
-      b.y += b.vy * dt;
-      if (b.y < -20) bullets.splice(bi, 1);
     }
 
     for (var mi = meteors.length - 1; mi >= 0; mi--) {
@@ -223,37 +215,31 @@
       m.y += m.vy * dt;
       m.rotation += m.spin * dt;
 
+      if (!m.resolved && m.y + m.radius >= hero.y) {
+        m.resolved = true;
+        if (Math.abs(m.x - hero.x) <= CATCH_RADIUS) {
+          score += m.points;
+          heroFlash = HERO_FLASH_DURATION;
+          spawnBurst(m.x, m.y, "255,214,110", 16);
+          spawnPopup(hero.x, hero.y - hero.radius - 10, "CATCH +" + m.points, "#ffd66e");
+          meteors.splice(mi, 1);
+          renderHud();
+          continue;
+        }
+      }
+
       if (m.y + m.radius >= earthTopY()) {
         meteors.splice(mi, 1);
         lives -= 1;
         shake = 0.35;
         spawnBurst(m.x, earthTopY(), "255,120,70", 18);
+        spawnPopup(m.x, earthTopY() - 16, "MISS", "#ff6b4a");
         renderHud();
         if (lives <= 0) {
           endGame();
           return;
         }
         continue;
-      }
-
-      for (bi = bullets.length - 1; bi >= 0; bi--) {
-        b = bullets[bi];
-        var dx = b.x - m.x;
-        var dy = b.y - m.y;
-        var distSq = dx * dx + dy * dy;
-        var hitDist = b.radius + m.radius;
-        if (distSq <= hitDist * hitDist) {
-          bullets.splice(bi, 1);
-          m.hp -= 1;
-          spawnBurst(b.x, b.y, "255,200,120", 4);
-          if (m.hp <= 0) {
-            score += m.points;
-            spawnBurst(m.x, m.y, "255,150,90", 14);
-            meteors.splice(mi, 1);
-            renderHud();
-          }
-          break;
-        }
       }
     }
 
@@ -265,6 +251,12 @@
       p.vx *= 0.94;
       p.vy *= 0.94;
       if (p.life >= p.maxLife) particles.splice(pi, 1);
+    }
+
+    for (var qi = popups.length - 1; qi >= 0; qi--) {
+      var q = popups[qi];
+      q.life += dt;
+      if (q.life >= q.maxLife) popups.splice(qi, 1);
     }
 
     if (shake > 0) shake = Math.max(0, shake - dt * 1.4);
@@ -302,13 +294,24 @@
   }
 
   function drawHero() {
+    var scale = heroFlash > 0 ? 1 + (heroFlash / HERO_FLASH_DURATION) * 0.35 : 1;
     ctx.save();
     ctx.translate(hero.x, hero.y);
+    ctx.scale(scale, scale);
     ctx.font = (hero.radius * 2.1) + "px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("🦸", 0, 2);
     ctx.restore();
+
+    if (heroFlash > 0) {
+      var t = 1 - heroFlash / HERO_FLASH_DURATION;
+      ctx.beginPath();
+      ctx.arc(hero.x, hero.y, hero.radius + t * 40, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,214,110," + (1 - t) + ")";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
   }
 
   function drawMeteor(m) {
@@ -326,24 +329,6 @@
       ctx.fill();
     });
     ctx.restore();
-
-    if (m.hp < m.maxHp) {
-      var barW = m.radius * 1.6;
-      ctx.fillStyle = "rgba(0,0,0,0.4)";
-      ctx.fillRect(m.x - barW / 2, m.y - m.radius - 10, barW, 4);
-      ctx.fillStyle = "#ff6b4a";
-      ctx.fillRect(m.x - barW / 2, m.y - m.radius - 10, barW * (m.hp / m.maxHp), 4);
-    }
-  }
-
-  function drawBullet(b) {
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffe4a8";
-    ctx.shadowColor = "#ff6b4a";
-    ctx.shadowBlur = 8;
-    ctx.fill();
-    ctx.shadowBlur = 0;
   }
 
   function drawParticles() {
@@ -353,6 +338,18 @@
       ctx.arc(p.x, p.y, p.radius * t, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(" + p.color + "," + t + ")";
       ctx.fill();
+    });
+  }
+
+  function drawPopups() {
+    ctx.textAlign = "center";
+    ctx.font = "bold 15px sans-serif";
+    popups.forEach(function (q) {
+      var t = q.life / q.maxLife;
+      ctx.fillStyle = q.color;
+      ctx.globalAlpha = 1 - t;
+      ctx.fillText(q.text, q.x, q.y - t * 36);
+      ctx.globalAlpha = 1;
     });
   }
 
@@ -366,8 +363,8 @@
 
     drawEarth();
     meteors.forEach(drawMeteor);
-    bullets.forEach(drawBullet);
     drawParticles();
+    drawPopups();
     if (state === STATE_PLAYING) drawHero();
 
     ctx.restore();
