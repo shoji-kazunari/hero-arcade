@@ -11,7 +11,8 @@
   var EXPLOSION_DURATION = 1.0;
   var BULLET_SPEED = 620;
   var BLACK_CHANCE = 0.12;
-  var WAVE_METEOR_COUNT = 30;
+  var CLUSTER_SIZE_MIN = 3;
+  var CLUSTER_SIZE_MAX = 7;
   var DEAD_FREEZE_DURATION = 1.3;
   var MIN_CLUSTER_GAP = 210;
 
@@ -152,11 +153,12 @@
     return { x: rand(marginX + 20, W - marginX - 20), y: searchDepth + 40 };
   }
 
-  function growCluster(list, center, size, marginX) {
+  function growCluster(list, center, size, marginX, clusterId) {
     var members = [];
     var first = makeMeteorSpec();
     first.x = clamp(center.x, marginX, W - marginX);
     first.y = center.y;
+    first.clusterId = clusterId;
     if (!overlapsAny(list, first.x, first.y, first.radius)) {
       list.push(first);
       members.push(first);
@@ -168,9 +170,11 @@
       tries++;
       var anchor = members[Math.floor(Math.random() * members.length)];
       var spec = makeMeteorSpec();
+      spec.clusterId = clusterId;
       for (var attempt = 0; attempt < 20; attempt++) {
         var minDist = anchor.radius + spec.radius + 12;
-        var maxDist = Math.max(minDist + 10, anchor.blast * 0.8);
+        var linkBlast = Math.min(anchor.blast, spec.blast);
+        var maxDist = Math.max(minDist + 10, linkBlast * 0.8);
         var dist = rand(minDist, maxDist);
         var angle = rand(0, Math.PI * 2);
         var x = anchor.x + Math.cos(angle) * dist;
@@ -189,24 +193,22 @@
 
   function buildWave(number) {
     var marginX = 40;
-    var total = WAVE_METEOR_COUNT;
-    var clusterCount = Math.min(9, 4 + Math.floor(number / 3));
+    var clusterCount = Math.min(6, 1 + Math.floor((number - 1) / 2));
     var list = [];
     var centers = [];
+    var clusters = [];
     var searchDepth = 260;
-    var remaining = total;
 
     for (var c = 0; c < clusterCount; c++) {
-      var clustersLeft = clusterCount - c;
-      var avg = remaining / clustersLeft;
-      var size = Math.max(1, Math.round(rand(avg * 0.5, avg * 1.5)));
-      size = Math.min(size, remaining - (clustersLeft - 1));
-      size = Math.max(1, size);
-      remaining -= size;
+      var size = Math.round(rand(CLUSTER_SIZE_MIN, CLUSTER_SIZE_MAX));
 
       var center = findClusterCenter(list, centers, marginX, searchDepth);
       centers.push(center);
-      growCluster(list, center, size, marginX);
+      var members = growCluster(list, center, size, marginX, c);
+      if (!members.some(function (m) { return m.color === "gray"; }) && members.length > 0) {
+        members[0].color = "gray";
+      }
+      clusters.push({ total: members.length, remaining: members.length, leaked: false });
       searchDepth += 90;
     }
 
@@ -219,13 +221,10 @@
       if (m.offsetY > maxOffset) maxOffset = m.offsetY;
     });
 
-    var hasGray = list.some(function (m) { return m.color === "gray"; });
-    if (!hasGray && list.length > 0) list[0].color = "gray";
-
     var vy = 34 + Math.min(number, 12) * 4;
     var startY = -maxOffset - 60;
 
-    return { meteors: list, formationY: startY, vy: vy, anyLeaked: false };
+    return { meteors: list, clusters: clusters, formationY: startY, vy: vy, anyLeaked: false };
   }
 
   function makeCraters(radius) {
@@ -285,6 +284,13 @@
     chainCount += 1;
     chainDisplayTimer = 0.8;
     hp = Math.min(HP_MAX, hp + CHAIN_HEAL);
+
+    var cluster = wave.clusters[m.clusterId];
+    cluster.remaining -= 1;
+    if (cluster.remaining <= 0 && !cluster.leaked && ammo < MAX_AMMO) {
+      ammo = Math.min(MAX_AMMO, ammo + 1);
+      spawnPopup(m.x, meteorY(m) - 20, "+1 弾", "#ffd66e");
+    }
   }
 
   function startWave() {
@@ -395,6 +401,9 @@
         var dmg = SIZE_DEF[meteor2.size].damage;
         hp -= dmg;
         waveAnyLeaked = true;
+        var leakedCluster = wave.clusters[meteor2.clusterId];
+        leakedCluster.leaked = true;
+        leakedCluster.remaining -= 1;
         shake = 0.3;
         spawnBurst(meteor2.x, damageLine, "255,120,70", 14);
         spawnPopup(meteor2.x, damageLine - 16, "-" + dmg, "#ff6b4a");
@@ -667,6 +676,7 @@
     if (!pointerActive) return;
     pointerActive = false;
     if (pointerMoved <= TAP_MAX_DIST && state === STATE_PLAYING) {
+      ship.x = ship.targetX;
       fireBullet();
     }
   }
